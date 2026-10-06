@@ -1,16 +1,22 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? import.meta.env.SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.SUPABASE_URL as string | undefined;
+const supabaseAnonKey = import.meta.env.SUPABASE_ANON_KEY as string | undefined;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Supabase configuration is missing. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+
+export const supabase: SupabaseClient | null =
+  isSupabaseConfigured ? createClient(supabaseUrl!, supabaseAnonKey!, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  }) : null;
+
+export function requireSupabase(): SupabaseClient {
+  if (!supabase) {
+    throw new Error("Supabase is not configured. Copy .env.example to .env.local and add your project URL and anon key.");
+  }
+  return supabase;
 }
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
