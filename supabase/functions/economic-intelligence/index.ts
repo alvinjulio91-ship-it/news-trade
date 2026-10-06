@@ -187,6 +187,99 @@ async function fetchCalendar(start: Date, end: Date, category?: string) {
   } satisfies Event & { source_name?: string; source_url?: string; indicators: unknown[] }));
 }
 
+const FRED_SERIES: Record<string, { name: string; code: string }[]> = {
+  Inflation: [
+    { name: "CPI", code: "CPIAUCSL" },
+    { name: "Core CPI", code: "CPILFESL" },
+    { name: "PPI", code: "PPIFIS" },
+  ],
+  Employment: [
+    { name: "Nonfarm Payrolls", code: "PAYEMS" },
+    { name: "Unemployment Rate", code: "UNRATE" },
+    { name: "Average Hourly Earnings", code: "CES0500000003" },
+    { name: "Initial Jobless Claims", code: "ICSA" },
+    { name: "Continuing Claims", code: "CCSA" },
+  ],
+  Consumer: [
+    { name: "Retail Sales", code: "RSAFS" },
+    { name: "Personal Income", code: "PI" },
+    { name: "Personal Consumption Expenditures", code: "PCE" },
+  ],
+  Retail: [
+    { name: "Retail Sales", code: "RSAFS" },
+    { name: "Personal Consumption Expenditures", code: "PCE" },
+  ],
+  GDP: [
+    { name: "Real GDP", code: "GDPC1" },
+    { name: "Personal Income", code: "PI" },
+  ],
+  Fed: [
+    { name: "Federal Funds Rate", code: "FEDFUNDS" },
+  ],
+};
+
+async function fetchFredIndicators(category: string | null, eventName: string): Promise<Indicator[]> {
+  const key = Deno.env.get("FRED_API_KEY");
+  if (!key || !category || !FRED_SERIES[category]) return [];
+  const series = FRED_SERIES[category];
+  const results: Indicator[] = [];
+  for (const item of series) {
+    try {
+      const params = new URLSearchParams({
+        series_id: item.code,
+        api_key: key,
+        file_type: "json",
+        sort_order: "desc",
+        limit: "2",
+      });
+      const response = await fetch("https://api.stlouisfed.org/fred/series/observations?" + params.toString());
+      if (!response.ok) continue;
+      const payload = await response.json();
+      const obs = Array.isArray(payload.observations) ? payload.observations.filter((x: Record<string, unknown>) => x.value !== ".") : [];
+      const latest = obs[0];
+      const previous = obs[1];
+      if (!latest) continue;
+      const latestValue = numeric(latest.value);
+      const previousValue = numeric(previous?.value);
+      const delta = latestValue != null && previousValue != null ? latestValue - previousValue : null;
+      results.push({
+        event_name: eventName,
+        indicator_name: item.name,
+        indicator_code: item.code,
+        relationship: "mixed",
+        latest_value: latestValue,
+        previous_value: previousValue,
+        latest_date: latest.date ? String(latest.date) : null,
+        surprise: null,
+        direction: delta == null ? "neutral" : delta > 0 ? "positive" : delta < 0 ? "negative" : "neutral",
+        relevance: 70,
+        source_name: "Federal Reserve Bank of St. Louis (FRED)",
+        source_url: "https://fred.stlouisfed.org/series/" + item.code,
+      });
+    } catch {
+      // One unavailable series must not block the rest of the event refresh.
+    }
+  }
+  return results;
+}
+
+function scenarioIndicators(event: Event, rows: Record<string, unknown>[]): Indicator[] {
+  return rows.map((x) => ({
+    event_name: event.event_name,
+    indicator_name: String(x.indicator_name ?? x.name ?? "Related indicator"),
+    indicator_code: x.indicator_code ? String(x.indicator_code) : undefined,
+    relationship: x.relationship ? String(x.relationship) : "mixed",
+    latest_value: numeric(x.latest_value),
+    previous_value: numeric(x.previous_value),
+    latest_date: x.latest_date ? String(x.latest_date) : null,
+    surprise: numeric(x.surprise),
+    direction: String(x.direction ?? "neutral"),
+    relevance: numeric(x.relevance) ?? 0,
+    source_name: x.source_name ? String(x.source_name) : undefined,
+    source_url: x.source_url ? String(x.source_url) : undefined,
+  }));
+}
+
 async function persistCalendar(admin: ReturnType<typeof createClient>, events: (Event & { source_name?: string; source_url?: string; indicators?: unknown[] })[]) {
   const now = new Date();
   const normalized = events
@@ -206,7 +299,7 @@ async function persistCalendar(admin: ReturnType<typeof createClient>, events: (
     if (!incoming) continue;
 
     if (incoming.source_name && incoming.source_url) {
-      await admin.from("economic_event_sources").insert({
+      await admin.from("economic_event_sources").upsert({
         event_id: event.id,
         source_name: incoming.source_name,
         source_url: incoming.source_url,
