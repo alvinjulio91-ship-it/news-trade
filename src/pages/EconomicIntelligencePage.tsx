@@ -19,9 +19,16 @@ function ScenarioLabel({type}:{type:string}){return <>{type==="above_forecast"?"
 
 export default function EconomicIntelligencePage(){
   const nav=useNavigate();
-  const [range,setRange]=useState(14),[category,setCategory]=useState("All"),[search,setSearch]=useState("");
+  const [range,setRange]=useState(14),[category,setCategory]=useState("All"),[search,setSearch]=useState(""),[searchLoading,setSearchLoading]=useState(false);
   const [events,setEvents]=useState<EventRow[]>([]),[scenarios,setScenarios]=useState<Scenario[]>([]),[news,setNews]=useState<News[]>([]);
   const [loading,setLoading]=useState(false),[error,setError]=useState(""),[retrieved,setRetrieved]=useState<string|null>(null);
+  const runSearch=async()=>{
+    const q=search.trim(); if(!q||!isSupabaseConfigured) return;
+    setSearchLoading(true); setError("");
+    const {data,error:fnError}=await requireSupabase().functions.invoke("economic-intelligence",{body:{operation:"search",query:q,range_days:range,filters:{category}}});
+    if(fnError||data?.error)setError(fnError?.message??data.error); else setNews((data?.results??[]) as News[]);
+    setSearchLoading(false);
+  };
   const load=useCallback(async()=>{
     setLoading(true);setError("");
     if(!isSupabaseConfigured){setError("Supabase belum dikonfigurasi.");setLoading(false);return}
@@ -47,14 +54,14 @@ export default function EconomicIntelligencePage(){
     </section>
 
     <Panel className="p-4">
-      <div className="flex flex-col gap-3 lg:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#7f8da3]"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search US Economic Intelligence..." className="h-10 w-full rounded-md border border-[#1c2938] bg-[#080d15] pl-9 pr-3 text-sm outline-none placeholder:text-[#7f8da3]"/></div><button onClick={()=>void load()} disabled={loading} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[#1c2938] bg-[#111925] px-4 text-xs font-semibold disabled:opacity-60"><RefreshCw className={loading?"size-3.5 animate-spin":"size-3.5"}/>Refresh intelligence</button></div>
+      <form onSubmit={e=>{e.preventDefault();void runSearch()}} className="flex flex-col gap-3 lg:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#7f8da3]"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search US Economic Intelligence..." className="h-10 w-full rounded-md border border-[#1c2938] bg-[#080d15] pl-9 pr-3 text-sm outline-none placeholder:text-[#7f8da3]"/></div><button type="submit" disabled={searchLoading||!search.trim()} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-sky-400/20 bg-sky-400/10 px-4 text-xs font-semibold text-sky-200 disabled:opacity-60">{searchLoading?"Searching…":"Search intelligence"}</button><button type="button" onClick={()=>void load()} disabled={loading} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[#1c2938] bg-[#111925] px-4 text-xs font-semibold disabled:opacity-60"><RefreshCw className={loading?"size-3.5 animate-spin":"size-3.5"}/>Refresh intelligence</button></form>
       <div className="mt-4 flex flex-col gap-3 border-t border-[#1c2938]/70 pt-4"><div className="flex flex-wrap gap-1.5">{ranges.map(x=><button key={x} onClick={()=>setRange(x)} className={"rounded-md border px-3 py-1.5 text-[10px] font-semibold "+(range===x?"border-sky-400/30 bg-sky-400/10 text-sky-200":"border-[#1c2938] text-[#7f8da3]")}>NEXT {x} {x===1?"DAY":"DAYS"}</button>)}</div><div className="flex flex-wrap gap-1.5">{categories.map(x=><button key={x} onClick={()=>setCategory(x)} className={"rounded-md px-2.5 py-1.5 text-[10px] "+(category===x?"bg-[#162131] text-foreground":"text-[#7f8da3]")}>{x}</button>)}</div></div>
     </Panel>
 
     {error?<Panel className="border-amber-400/20 bg-amber-400/5 p-4"><div className="text-xs font-semibold text-amber-200">Intelligence unavailable</div><div className="mt-1 text-xs text-amber-200/70">{error}</div></Panel>:null}
 
     <div className="grid gap-4 xl:grid-cols-4">{[
-      ["WHAT JUST RELEASED?",released[0]?.event_name??"—"],["WHAT'S COMING NEXT?",focus?.event_name??"—"],["OFFICIAL FORECAST",focus?.forecast??"—"],["AI EXPECTATION",focusScenarios[0]?String(<ScenarioLabel type={focusScenarios[0].scenario_type}/>):"Insufficient evidence"]
+      ["WHAT JUST RELEASED?",released[0]?.event_name??"—"],["WHAT'S COMING NEXT?",focus?.event_name??"—"],["OFFICIAL FORECAST",focus?.forecast??"—"],["AI EXPECTATION",focusScenarios[0]?focusScenarios[0].scenario_type==="above_forecast"?"Potentially ABOVE FORECAST":focusScenarios[0].scenario_type==="below_forecast"?"Potentially BELOW FORECAST":"Potentially NEAR FORECAST":"Insufficient evidence"]
     ].map(([a,b])=><Panel key={a} className="p-4"><div className="text-[9px] uppercase tracking-[.16em] text-[#7f8da3]">{a}</div><div className="mt-3 text-sm font-semibold">{b}</div></Panel>)}</div>
 
     <div className="grid gap-5 xl:grid-cols-2">
