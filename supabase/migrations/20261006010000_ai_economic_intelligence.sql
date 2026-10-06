@@ -87,6 +87,7 @@ create table if not exists public.economic_news_sources (
   created_at timestamptz not null default now()
 );
 
+create unique index if not exists economic_event_history_event_release_uidx on public.economic_event_history(event_id, release_date);
 create index if not exists economic_event_sources_event_id_idx on public.economic_event_sources(event_id);
 create index if not exists economic_event_history_event_id_idx on public.economic_event_history(event_id, release_date desc);
 create index if not exists economic_event_indicators_event_id_idx on public.economic_event_indicators(event_id, relevance desc);
