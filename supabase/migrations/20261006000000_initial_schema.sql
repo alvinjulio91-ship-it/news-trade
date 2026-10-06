@@ -232,3 +232,52 @@ begin
     end;
   end loop;
 end $$;
+
+
+-- Deployment self-check: fail the migration if a required table, RLS flag, or policy is missing.
+do $$
+declare
+  required_table text;
+  required_tables text[] := array[
+    'profiles','watchlists','crypto_assets','market_prices','economic_events',
+    'economic_news','news_analysis','market_analysis','user_preferences','price_alerts'
+  ];
+  required_policy text;
+begin
+  foreach required_table in array required_tables loop
+    if to_regclass(format('public.%I', required_table)) is null then
+      raise exception 'Required table public.% is missing', required_table;
+    end if;
+
+    if not exists (
+      select 1
+      from pg_class c
+      where c.oid = to_regclass(format('public.%I', required_table))
+        and c.relrowsecurity
+    ) then
+      raise exception 'RLS is not enabled on public.%', required_table;
+    end if;
+  end loop;
+
+  foreach required_policy in array array[
+    'profiles_select_own','profiles_insert_own','profiles_update_own',
+    'watchlists_select_own','watchlists_insert_own','watchlists_update_own','watchlists_delete_own',
+    'crypto_assets_read','market_prices_read','economic_events_read','economic_news_read',
+    'news_analysis_read','market_analysis_read',
+    'preferences_select_own','preferences_insert_own','preferences_update_own','preferences_delete_own',
+    'price_alerts_select_own','price_alerts_insert_own','price_alerts_update_own','price_alerts_delete_own'
+  ] loop
+    if not exists (
+      select 1
+      from pg_policy p
+      where p.polname = required_policy
+        and p.polrelid in (
+          select c.oid from pg_class c
+          join pg_namespace n on n.oid = c.relnamespace
+          where n.nspname = 'public'
+        )
+    ) then
+      raise exception 'Required RLS policy % is missing', required_policy;
+    end if;
+  end loop;
+end $$;
