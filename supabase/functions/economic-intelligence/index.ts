@@ -169,7 +169,7 @@ async function fetchCalendar(start: Date, end: Date, category?: string) {
     if (!response.ok) throw new Error("Trading Economics calendar request failed (" + response.status + ").");
     const payload = await response.json();
     const rawEvents = Array.isArray(payload) ? payload : [];
-    return rawEvents.map((x: Record<string, unknown>) => {
+    const mapped = rawEvents.map((x: Record<string, unknown>) => {
       const importanceNumber = numeric(x.Importance) ?? 1;
       const importance = importanceNumber >= 3 ? "high" : importanceNumber >= 2 ? "medium" : "low";
       const categoryName = String(x.Category ?? "All");
@@ -191,6 +191,9 @@ async function fetchCalendar(start: Date, end: Date, category?: string) {
         indicators: [],
       } satisfies Event & { source_name?: string; source_url?: string; indicators: unknown[] };
     }).filter((e: Event) => e.event_name && e.event_time);
+    return category && category !== "All"
+      ? mapped.filter((e: Event) => normalizeCategory((e.category ?? "") + " " + e.event_name) === normalizeCategory(category))
+      : mapped;
   }
 
   if (!genericUrl) throw new Error("Economic calendar provider is not configured. Add TRADING_ECONOMICS_API_KEY or ECONOMIC_DATA_API_URL to Supabase Edge Function secrets.");
@@ -476,11 +479,12 @@ Deno.serve(async (req) => {
 
     const newsQuery = String(body.news_query ?? "US economy latest Reuters Federal Reserve inflation employment");
     let news: unknown[] = [];
+    let news_error: string | null = null;
     try {
       const payload = await googleSearch(newsQuery);
       news = mapSearchResults(payload);
-    } catch {
-      news = [];
+    } catch (error) {
+      news_error = error instanceof Error ? error.message : "News search unavailable.";
     }
 
     return json({
@@ -489,6 +493,7 @@ Deno.serve(async (req) => {
       released: stored.events.filter((e: Event) => e.status === "released"),
       upcoming: stored.events.filter((e: Event) => e.status === "upcoming"),
       news,
+      news_error,
       source_verification: "Verified means the result URL matches a configured trusted-domain allowlist; it does not guarantee the content is correct.",
     });
   } catch (error) {
