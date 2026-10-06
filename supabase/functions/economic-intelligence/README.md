@@ -10,12 +10,15 @@ POST:
 
 The function:
 1. verifies the Supabase user session;
-2. fetches US events from the configured Economic Data API;
-3. classifies events as released/upcoming from event time and actual value;
-4. stores official event data;
-5. stores sources and supporting indicators;
-6. creates transparent above/near/below scenario scores for upcoming events;
-7. performs a recent macro news search.
+2. fetches the US economic calendar from Trading Economics when `TRADING_ECONOMICS_API_KEY` is configured;
+3. otherwise uses the provider-neutral `ECONOMIC_DATA_API_URL` adapter;
+4. classifies events as released/upcoming from event time and actual value;
+5. stores official event data;
+6. stores sources and supporting indicators;
+7. creates transparent above/near/below scenario scores for upcoming events;
+8. performs a recent macro news search.
+
+Trading Economics documents a US country calendar endpoint that exposes fields including Actual, Previous, Forecast, Source, Importance, and LastUpdate. citeturn622116search2
 
 ### search
 POST:
@@ -25,58 +28,40 @@ The function searches Google Custom Search JSON API server-side and never expose
 
 ## Secrets
 
-Store secrets in Supabase Edge Function secrets, not in frontend code:
+Store secrets in Supabase Edge Function secrets, not frontend code:
 
 - `GOOGLE_CSE_API_KEY`
 - `GOOGLE_CSE_ID`
-- `ECONOMIC_DATA_API_URL`
+- `TRADING_ECONOMICS_API_KEY` (recommended calendar adapter)
+- `ECONOMIC_DATA_API_URL` (fallback/provider-neutral adapter)
 - `ECONOMIC_DATA_API_KEY` (optional depending on provider)
 - `ECONOMIC_DATA_API_PROVIDER`
-- `FRED_API_KEY` (reserved for official supporting-series adapters)
-- `SUPABASE_SERVICE_ROLE_KEY` (provided by/managed in the Supabase project environment)
+- `FRED_API_KEY` (supporting official series)
+- `SUPABASE_SERVICE_ROLE_KEY`
 
-For local function development, use `supabase/functions/.env`. Do not commit that file.
+Do not commit `supabase/functions/.env`.
 
-## Economic Data API contract
+The frontend only needs:
 
-The current adapter intentionally uses a provider-neutral contract because no specific calendar vendor was supplied.
+```env
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+```
 
-The endpoint should accept:
-- `country=US`
-- `from=<ISO timestamp>`
-- `to=<ISO timestamp>`
-- `limit=250`
-- optional `category=<category>`
-- optional `api_key=<key>`
+## Important deployment note
 
-Response can be an array or:
-`{"events":[...]}`
+Changing the Edge Function source in GitHub does not by itself update an already deployed Supabase Edge Function unless your deployment pipeline is configured to do so.
 
-Each event should expose:
-- `event_name`
-- `country`
-- `currency`
-- `event_time`
-- `importance`
-- `previous`
-- `forecast` (official/provider forecast)
-- `actual`
-- `status`
-- `category`
-- `related_asset`
-- optional `source_name`, `source_url`
-- optional `indicators[]`
+After changing this function, deploy it again:
 
-The function does not synthesize missing official values. A null value remains null in the UI.
+```bash
+supabase functions deploy economic-intelligence
+```
 
-## Scenario model
+Then refresh `/economic-intelligence`.
 
-The initial pre-prediction engine is deliberately transparent and evidence based. It can output:
-- ABOVE FORECAST
-- NEAR FORECAST
-- BELOW FORECAST
+## Data integrity
 
-Confidence is a model-confidence score, not a guaranteed probability of release or price direction. Numeric AI estimates remain null until an actual forecasting model is connected.
+The function never invents missing official Previous/Forecast/Actual values. Missing values remain null and are rendered as `—`.
 
-When evidence is absent, the function returns:
-`Insufficient evidence to estimate the likely release.`
+The AI scenario layer is not the official forecast. It only scores Above / Near / Below Forecast from available evidence. Without sufficient evidence it explicitly returns `Insufficient evidence to estimate the likely release.`
