@@ -154,17 +154,53 @@ async function googleSearch(query: string) {
 }
 
 async function fetchCalendar(start: Date, end: Date, category?: string) {
-  const url = Deno.env.get("ECONOMIC_DATA_API_URL");
+  const genericUrl = Deno.env.get("ECONOMIC_DATA_API_URL");
   const provider = Deno.env.get("ECONOMIC_DATA_API_PROVIDER") ?? "generic";
-  const key = Deno.env.get("ECONOMIC_DATA_API_KEY");
-  if (!url) throw new Error("Economic Data API is not configured. Set ECONOMIC_DATA_API_URL.");
-  const target = new URL(url);
+  const genericKey = Deno.env.get("ECONOMIC_DATA_API_KEY");
+  const tradingEconomicsKey = Deno.env.get("TRADING_ECONOMICS_API_KEY");
+
+  if (tradingEconomicsKey) {
+    const from = start.toISOString().slice(0, 10);
+    const to = end.toISOString().slice(0, 10);
+    const teUrl = new URL("https://api.tradingeconomics.com/calendar/country/united%20states/" + from + "/" + to);
+    teUrl.searchParams.set("c", tradingEconomicsKey);
+    teUrl.searchParams.set("f", "json");
+    const response = await fetch(teUrl.toString(), { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error("Trading Economics calendar request failed (" + response.status + ").");
+    const payload = await response.json();
+    const rawEvents = Array.isArray(payload) ? payload : [];
+    return rawEvents.map((x: Record<string, unknown>) => {
+      const importanceNumber = numeric(x.Importance) ?? 1;
+      const importance = importanceNumber >= 3 ? "high" : importanceNumber >= 2 ? "medium" : "low";
+      const categoryName = String(x.Category ?? "All");
+      const eventName = String(x.Event ?? "");
+      return {
+        event_name: eventName,
+        country: String(x.Country ?? "United States"),
+        currency: x.Currency ? String(x.Currency) : "USD",
+        event_time: String(x.Date ?? ""),
+        importance,
+        previous: numeric(x.Previous),
+        forecast: numeric(x.Forecast ?? x.TEForecast),
+        actual: numeric(x.Actual),
+        status: undefined,
+        category: normalizeCategory(categoryName + " " + eventName),
+        related_asset: "XAUUSD",
+        source_name: x.Source ? String(x.Source) : undefined,
+        source_url: x.SourceURL ? String(x.SourceURL) : undefined,
+        indicators: [],
+      } satisfies Event & { source_name?: string; source_url?: string; indicators: unknown[] };
+    }).filter((e: Event) => e.event_name && e.event_time);
+  }
+
+  if (!genericUrl) throw new Error("Economic calendar provider is not configured. Add TRADING_ECONOMICS_API_KEY or ECONOMIC_DATA_API_URL to Supabase Edge Function secrets.");
+  const target = new URL(genericUrl);
   target.searchParams.set("country", "US");
   target.searchParams.set("from", start.toISOString());
   target.searchParams.set("to", end.toISOString());
   target.searchParams.set("limit", "250");
   if (category && category !== "All") target.searchParams.set("category", category);
-  if (key) target.searchParams.set("api_key", key);
+  if (genericKey) target.searchParams.set("api_key", genericKey);
   const response = await fetch(target.toString(), { headers: { Accept: "application/json", "X-Economic-Provider": provider } });
   if (!response.ok) throw new Error("Economic Data API request failed (" + response.status + ").");
   const payload = await response.json();
@@ -185,6 +221,18 @@ async function fetchCalendar(start: Date, end: Date, category?: string) {
     source_url: x.source_url ? String(x.source_url) : undefined,
     indicators: Array.isArray(x.indicators) ? x.indicators : [],
   } satisfies Event & { source_name?: string; source_url?: string; indicators: unknown[] }));
+}
+
+function normalizeCategory(value: string) {
+  const x = value.toLowerCase();
+  if (/cpi|consumer price|ppi|producer price|pce|inflation/.test(x)) return "Inflation";
+  if (/non farm|payroll|employment|unemployment|jobless|claims|adp|jolts|wage/.test(x)) return "Employment";
+  if (/fomc|fed|interest rate|federal funds/.test(x)) return "Fed";
+  if (/gdp/.test(x)) return "GDP";
+  if (/pmi|manufacturing|ism/.test(x)) return "PMI";
+  if (/retail|consumer confidence|consumer sentiment|personal spending|personal income/.test(x)) return "Consumer";
+  if (/housing|home|building permit|housing starts/.test(x)) return "Housing";
+  return "All";
 }
 
 const FRED_SERIES: Record<string, { name: string; code: string }[]> = {
