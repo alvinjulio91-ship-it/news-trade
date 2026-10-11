@@ -74,7 +74,7 @@ export default function TradingPlanPage() {
 
   useEffect(() => {
     setTargetDraft(rupiahInput(data.months[data.selectedMonth]?.target ?? 0));
-  }, [data.selectedMonth, data.months]);
+  }, [data.selectedMonth, monthData.target]);
 
   useEffect(() => {
     if (!notice) return;
@@ -168,7 +168,7 @@ export default function TradingPlanPage() {
   };
 
   const saveReview = (review: string) => {
-    commit({...data, months:{...data.months, [selectedMonth]:{...monthData, review}}}, "Catatan evaluasi tersimpan");
+    commit({...data, months:{...data.months, [selectedMonth]:{...monthData, review}}});
   };
 
   const resetMonth = () => {
@@ -238,13 +238,13 @@ export default function TradingPlanPage() {
 
     <section className={cardStyle("p-4 sm:p-5")}>
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div><div className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#8190a5]">Monthly Target</div><div className="mt-2 text-sm text-slate-200">Target dan hasil untuk bulan yang dipilih</div></div>{monthPicker}</div>
-      <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end"><label className="block"><span className="mb-2 block text-[11px] text-[#a4b0c0]">Target bulanan (Rupiah)</span><div className="flex h-11 items-center rounded-xl border border-[#263448] bg-[#080d15] px-3 focus-within:border-sky-400/40"><span className="mr-2 text-xs text-[#8190a5]">Rp</span><input type="number" inputMode="numeric" min="0" step="1000" value={targetDraft} onChange={e=>setTargetDraft(e.target.value)} placeholder="5.000.000" className="min-w-0 flex-1 bg-transparent text-sm text-slate-100 outline-none placeholder:text-[#56657a]" aria-label="Target bulanan"/></div></label><button type="button" onClick={saveTarget} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-100 px-4 text-xs font-semibold text-slate-950 hover:bg-white"><Save className="size-3.5"/>Simpan target</button></div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end"><label className="block"><span className="mb-2 block text-[11px] text-[#a4b0c0]">Target bulanan (Rupiah)</span><div className="flex h-11 items-center rounded-xl border border-[#263448] bg-[#080d15] px-3 focus-within:border-sky-400/40"><span className="mr-2 text-xs text-[#8190a5]">Rp</span><input type="number" inputMode="numeric" min="0" step="1" value={targetDraft} onChange={e=>setTargetDraft(e.target.value)} placeholder="5.000.000" className="min-w-0 flex-1 bg-transparent text-sm text-slate-100 outline-none placeholder:text-[#56657a]" aria-label="Target bulanan"/></div></label><button type="button" onClick={saveTarget} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-100 px-4 text-xs font-semibold text-slate-950 hover:bg-white"><Save className="size-3.5"/>Simpan target</button></div>
       {formError&&!formOpen?<p className="mt-2 text-[11px] text-rose-300">{formError}</p>:null}
       <div className="mt-6 grid gap-3 sm:grid-cols-3"><MetricCard label="Total hasil / Net result" value={formatSignedRupiah(stats.netResult)} icon={Wallet} tone={stats.netResult<0?"red":stats.netResult>0?"green":"neutral"} hint="Profit dikurangi loss"/><MetricCard label="Progress target" value={monthData.target>0?Math.round(stats.rawProgress)+"%":"—"} icon={Target} tone="neutral" hint="Berdasarkan net result"/><MetricCard label="Sisa target" value={stats.remainingTarget>0?formatRupiah(stats.remainingTarget):stats.remainingTarget<0?"Tercapai + "+formatRupiah(Math.abs(stats.remainingTarget)):formatRupiah(0)} icon={TrendingUp} tone={stats.remainingTarget<0?"green":"neutral"} hint={stats.remainingTarget<0?"Target telah terlampaui": "Target dikurangi net result"}/></div>
       <div className="mt-5"><div className="mb-2 flex items-center justify-between gap-3 text-[10px]"><span className="text-[#8190a5]">Pencapaian target</span><span className="font-semibold text-slate-200">{monthData.target>0?Math.round(stats.rawProgress)+"%":"Target belum diatur"}</span></div><div className="h-2.5 overflow-hidden rounded-full bg-[#192433]"><div className="h-full rounded-full bg-gradient-to-r from-sky-500 to-cyan-300 transition-[width] duration-300" style={{width:stats.progress+"%"}}/></div><div className="mt-2 text-[10px] text-[#8190a5]">{stats.netResult<0?"Net result masih negatif.":stats.progress>=100&&monthData.target>0?"Target bulanan tercapai.":"Progress bar dibatasi dari 0% sampai 100%."}</div></div>
     </section>
 
-    <section className="grid gap-3 sm:grid-cols-3"><MetricCard label="Total Profit" value={formatRupiah(stats.totalProfit)} icon={TrendingUp} tone="green"/><MetricCard label="Total Loss" value={"- "+formatRupiah(stats.totalLoss)} icon={TrendingDown} tone="red"/><MetricCard label="Jumlah Record" value={String(stats.recordCount)} icon={FileJson} tone="neutral" hint={monthLabel(selectedMonth)}/></section>
+    <section className="grid gap-3 sm:grid-cols-3"><MetricCard label="Total Profit" value={formatRupiah(stats.totalProfit)} icon={TrendingUp} tone="green"/><MetricCard label="Total Loss" value={stats.totalLoss>0?"- "+formatRupiah(stats.totalLoss):formatRupiah(0)} icon={TrendingDown} tone="red"/><MetricCard label="Jumlah Record" value={String(stats.recordCount)} icon={FileJson} tone="neutral" hint={monthLabel(selectedMonth)}/></section>
 
     <section className={cardStyle("p-4 sm:p-5")}>
       <SectionTitle title="History" subtitle={"Record untuk "+monthLabel(selectedMonth)+". Record disimpan pada bulan masing-masing."} action={<button type="button" onClick={openAddForm} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-sky-300 px-3 text-xs font-semibold text-slate-950 hover:bg-sky-200"><Plus className="size-4"/>Tambah Record</button>}/>
@@ -264,7 +264,7 @@ export default function TradingPlanPage() {
 
     <section className={cardStyle("p-4 sm:p-5")}>
       <SectionTitle title="Monthly Review" subtitle={"Evaluasi performa "+monthLabel(selectedMonth)+"; disimpan otomatis."}/>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"><ReviewStat label="Target" value={formatRupiah(monthData.target)}/><ReviewStat label="Total Profit" value={formatRupiah(stats.totalProfit)} tone="green"/><ReviewStat label="Total Loss" value={"- "+formatRupiah(stats.totalLoss)} tone="red"/><ReviewStat label="Net Result" value={formatSignedRupiah(stats.netResult)} tone={stats.netResult<0?"red":stats.netResult>0?"green":"neutral"}/><ReviewStat label="Jumlah Record" value={String(stats.recordCount)}/><ReviewStat label="Pencapaian target" value={monthData.target>0?Math.round(stats.rawProgress)+"%":"—"}/></div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"><ReviewStat label="Target" value={formatRupiah(monthData.target)}/><ReviewStat label="Total Profit" value={formatRupiah(stats.totalProfit)} tone="green"/><ReviewStat label="Total Loss" value={stats.totalLoss>0?"- "+formatRupiah(stats.totalLoss):formatRupiah(0)} tone="red"/><ReviewStat label="Net Result" value={formatSignedRupiah(stats.netResult)} tone={stats.netResult<0?"red":stats.netResult>0?"green":"neutral"}/><ReviewStat label="Jumlah Record" value={String(stats.recordCount)}/><ReviewStat label="Pencapaian target" value={monthData.target>0?Math.round(stats.rawProgress)+"%":"—"}/></div>
       <label className="mt-5 block"><span className="mb-2 block text-[11px] font-medium text-[#a4b0c0]">Catatan evaluasi bulan ini</span><textarea value={monthData.review} onChange={e=>saveReview(e.target.value)} maxLength={5000} rows={4} placeholder="Apa yang berjalan baik? Apa yang perlu dievaluasi bulan depan?" className="w-full resize-y rounded-xl border border-[#263448] bg-[#080d15] p-3 text-xs leading-5 text-slate-100 outline-none placeholder:text-[#56657a] focus:border-sky-400/40"/></label><div className="mt-2 text-right text-[10px] text-[#8190a5]">{monthData.review.length}/5000 karakter · Tersimpan otomatis</div>
     </section>
 
