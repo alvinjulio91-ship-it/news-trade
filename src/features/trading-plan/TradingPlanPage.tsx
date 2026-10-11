@@ -86,7 +86,7 @@ export default function TradingPlanPage() {
     let nextStatus: StorageStatus = "unavailable";
     try {
       if (typeof window !== "undefined") {
-        window.localStorage.setItem(TRADING_PLAN_STORAGE_KEY, JSON.stringify(next));
+        window.localStorage.setItem(storageKey, JSON.stringify(next));
         nextStatus = "available";
       }
     } catch {
