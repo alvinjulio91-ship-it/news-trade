@@ -1,6 +1,9 @@
-# Trade News Intelligence
+# XAU News AI
 
-Professional market-intelligence terminal built with React, Vite, TypeScript, Tailwind CSS, shadcn/ui conventions, Lucide React, React Router, and Supabase.
+Mobile-first market-intelligence web app built with React, Vite, TypeScript, Tailwind CSS, Lucide React, React Router, and Supabase.
+
+## Trading Plan
+The `/trading-plan` module keeps a private monthly record of targets, profit/loss records, monthly reviews, and backups in browser `localStorage`. It does not generate trading signals or transaction recommendations. Data stays on the current browser unless the user exports a backup.
 
 ## Current stages
 
