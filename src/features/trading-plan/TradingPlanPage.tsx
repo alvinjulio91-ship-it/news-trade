@@ -94,7 +94,7 @@ export default function TradingPlanPage() {
     }
     setData(next);
     setStorageStatus(nextStatus);
-    if (toast) setNotice(toast);
+    if (toast) setNotice(nextStatus === "available" ? toast : "Perubahan hanya tersimpan sementara; browser menolak localStorage.");
   };
 
   const selectMonth = (month: string) => {
