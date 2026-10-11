@@ -50,7 +50,7 @@ export default function EconomicIntelligencePage(){
   return <div className="space-y-6">
     <section className="flex flex-col gap-4 border-b border-[#1c2938] pb-5 xl:flex-row xl:items-end xl:justify-between">
       <div><div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.2em] text-sky-300/80"><Sparkles className="size-3.5"/>INTELLIGENCE TERMINAL</div><h1 className="text-2xl font-semibold tracking-tight">AI Economic Intelligence</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-[#7f8da3]">US macro search, release tracking, evidence, scenarios, Gold impact, and source verification in one terminal view.</p></div>
-      <div className="flex flex-wrap gap-2"><Badge tone="green">SOURCE VERIFIED</Badge><Badge>OFFICIAL ≠ AI ESTIMATE</Badge><Badge tone="amber">SCENARIO, NOT CERTAINTY</Badge></div>
+      <div className="flex flex-wrap gap-2"><Badge tone="green">SOURCE LABELS SHOWN</Badge><Badge>OFFICIAL ≠ AI ESTIMATE</Badge><Badge tone="amber">SCENARIO, NOT CERTAINTY</Badge></div>
     </section>
 
     <Panel className="p-4">
