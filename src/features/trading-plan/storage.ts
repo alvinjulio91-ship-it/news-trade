@@ -155,7 +155,7 @@ export function formatRupiah(amount: number): string {
 
 export function formatSignedRupiah(amount: number, positivePlus = true): string {
   if (amount > 0 && positivePlus) return "+ " + formatRupiah(amount);
-  if (amount < 0) return "- " + formatRupiah(Math.abs(amount)).replace(/^Rp /, "");
+  if (amount < 0) return "- " + formatRupiah(Math.abs(amount));
   return formatRupiah(amount);
 }
 
