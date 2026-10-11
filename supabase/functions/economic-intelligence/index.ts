@@ -187,7 +187,8 @@ async function generateAIPrediction(event: Event, indicators: Indicator[], histo
   if (!response.ok) throw new Error("Gemini prediction request failed (" + response.status + ").");
   const payload = await response.json();
   const raw = payload?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "";
-  const parsed = JSON.parse(raw.replace(/^\`\`\`json\s*/i, "").replace(/\`\`\`$/, ""));
+  const clean = raw.startsWith("```json") ? raw.slice(7).replace(/```$/, "").trim() : raw.replace(/```$/, "").trim();
+  const parsed = JSON.parse(clean);
   const rows = Array.isArray(parsed.scenarios) ? parsed.scenarios : [];
   const expected = ["above_forecast", "near_forecast", "below_forecast"];
   const normalized = expected.map((type) => {
