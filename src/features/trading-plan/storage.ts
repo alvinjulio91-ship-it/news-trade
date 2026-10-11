@@ -1,5 +1,9 @@
 export const TRADING_PLAN_STORAGE_KEY = "xau_news_ai_trading_plan";
 
+export function tradingPlanStorageKey(userId?: string | null): string {
+  return userId ? TRADING_PLAN_STORAGE_KEY + ":" + userId : TRADING_PLAN_STORAGE_KEY;
+}
+
 export type RecordType = "profit" | "loss";
 
 export interface TradingRecord {
@@ -94,12 +98,12 @@ export function validateTradingPlanState(value: unknown): TradingPlanState | nul
   return { version: 1, selectedMonth: value.selectedMonth, months };
 }
 
-export function readTradingPlanState(): ReadResult {
+export function readTradingPlanState(storageKey = TRADING_PLAN_STORAGE_KEY): ReadResult {
   const fallback = emptyState();
   if (typeof window === "undefined") return { state: fallback, status: "unavailable" };
 
   try {
-    const raw = window.localStorage.getItem(TRADING_PLAN_STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey);
     if (raw === null) return { state: fallback, status: "available" };
     const parsed: unknown = JSON.parse(raw);
     const validated = validateTradingPlanState(parsed);
