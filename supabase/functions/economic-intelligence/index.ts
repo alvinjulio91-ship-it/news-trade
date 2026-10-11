@@ -593,8 +593,11 @@ Deno.serve(async (req) => {
     }
 
     const days = Math.min(14, Math.max(1, Number(body.range_days ?? 14)));
-    const start = new Date();
-    const end = new Date(start.getTime() + days * 24 * 60 * 60 * 1000);
+    const now = new Date();
+    // Load a short recent window as well as the requested forward window so the UI can
+    // separate recent releases from upcoming events and gradually build a surprise history.
+    const start = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+    const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
     const events = await fetchCalendar(start, end, body.category);
     const stored = await persistCalendar(admin, events);
 
@@ -611,8 +614,8 @@ Deno.serve(async (req) => {
     return json({
       retrieved_at: new Date().toISOString(),
       range: { from: start.toISOString(), to: end.toISOString(), days },
-      released: stored.events.filter((e: Event) => e.status === "released"),
-      upcoming: stored.events.filter((e: Event) => e.status === "upcoming"),
+      released: stored.events.filter((e: Event) => e.status === "released" && new Date(e.event_time).getTime() >= start.getTime() && new Date(e.event_time).getTime() <= now.getTime()),
+      upcoming: stored.events.filter((e: Event) => e.status === "upcoming" && new Date(e.event_time).getTime() > now.getTime() && new Date(e.event_time).getTime() <= end.getTime()),
       news,
       news_error,
       source_verification: "Verified means the result URL matches a configured trusted-domain allowlist; it does not guarantee the content is correct.",
