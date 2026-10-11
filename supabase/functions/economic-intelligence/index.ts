@@ -135,7 +135,6 @@ function fallbackScenarios(
       buildScenario(event, "below_forecast", 33, noHistory, belowSignals.map((x) => x.indicator_name), aboveSignals.map((x) => x.indicator_name)),
     ];
   }
-  const total = history.samples + 3;
   const above = history.above + 1 + Math.min(aboveSignals.length, 2);
   const below = history.below + 1 + Math.min(belowSignals.length, 2);
   const near = history.near + 1;
@@ -457,7 +456,7 @@ async function persistCalendar(admin: ReturnType<typeof createClient>, events: (
 
   const { data, error } = await admin.from("economic_events").upsert(
     normalized.map(({ source_name, source_url, indicators, ...event }) => event),
-    { onConflict: "id" },
+    { onConflict: "event_name,event_time" },
   ).select("*");
   if (error) throw error;
   const rows = data ?? [];
