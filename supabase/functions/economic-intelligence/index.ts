@@ -91,6 +91,18 @@ type HistoricalStats = { above: number; below: number; near: number; samples: nu
 
 async function buildScenarios(event: Event, indicators: Indicator[], history: HistoricalStats) {
   const relevant = indicators.filter((x) => !event.event_name || x.event_name.toLowerCase() === event.event_name.toLowerCase() || x.event_name.toLowerCase().includes(event.event_name.toLowerCase().split(" ")[0]));
+
+  // Without an official consensus forecast, "above" and "below forecast" have no defined
+  // reference point. Keep the scenario records for a stable UI, but mark every score unavailable.
+  if (event.forecast == null || !Number.isFinite(Number(event.forecast))) {
+    const message = "Official consensus forecast is unavailable. An above/near/below-forecast estimate cannot be made until a valid forecast is published.";
+    return [
+      buildScenario(event, "above_forecast", 0, message, [], []),
+      buildScenario(event, "near_forecast", 0, message, [], []),
+      buildScenario(event, "below_forecast", 0, message, [], []),
+    ];
+  }
+
   const aboveSignals = relevant.filter((x) => ["supports_above", "above_forecast", "supports_upside"].includes((x.relationship ?? "").toLowerCase()));
   const belowSignals = relevant.filter((x) => ["supports_below", "below_forecast", "supports_downside"].includes((x.relationship ?? "").toLowerCase()));
   const evidenceNames = relevant.slice(0, 8).map((x) => x.indicator_name);
@@ -193,7 +205,8 @@ async function generateAIPrediction(event: Event, indicators: Indicator[], histo
   const expected = ["above_forecast", "near_forecast", "below_forecast"];
   const normalized = expected.map((type) => {
     const row = rows.find((x: Record<string, unknown>) => x.scenario_type === type);
-    const score = Math.max(0, Math.min(100, Number(row?.score ?? 0)));
+    const rawScore = Number(row?.score ?? 0);
+    const score = Number.isFinite(rawScore) ? Math.max(0, Math.min(100, rawScore)) : 0;
     return {
       ...buildScenario(event, type as "above_forecast" | "near_forecast" | "below_forecast", score,
         String(row?.reasoning ?? "Evidence is limited."), stringArray(row?.supporting_factors), stringArray(row?.counter_factors)),
