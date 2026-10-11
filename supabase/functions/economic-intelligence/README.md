@@ -37,6 +37,7 @@ Store secrets in Supabase Edge Function secrets, not frontend code:
 - `ECONOMIC_DATA_API_KEY` (optional depending on provider)
 - `ECONOMIC_DATA_API_PROVIDER`
 - `FRED_API_KEY` (supporting official series)
+- `GEMINI_API_KEY` (optional; enables evidence-constrained AI scenario analysis)
 - `SUPABASE_SERVICE_ROLE_KEY`
 
 Do not commit `supabase/functions/.env`.
@@ -64,4 +65,4 @@ Then refresh `/economic-intelligence`.
 
 The function never invents missing official Previous/Forecast/Actual values. Missing values remain null and are rendered as `—`.
 
-The AI scenario layer is not the official forecast. It only scores Above / Near / Below Forecast from available evidence. Without sufficient evidence it explicitly returns `Insufficient evidence to estimate the likely release.`
+The AI scenario layer is not the official forecast. It compares stored historical surprises and available indicators, and optionally uses Gemini to summarize those inputs. Scores are relative model scores, not calibrated probabilities. Missing forecast values remain unknown, and weak evidence must be labeled insufficient rather than presented as a confident prediction.
