@@ -87,29 +87,146 @@ function goldImpact(category: string | null | undefined, scenario: string): stri
   return scenario === "near_forecast" ? "Potentially mixed" : "Direction depends on USD/yield transmission";
 }
 
-function buildScenarios(event: Event, indicators: Indicator[]) {
+type HistoricalStats = { above: number; below: number; near: number; samples: number; recent: string[] };
+
+async function buildScenarios(event: Event, indicators: Indicator[], history: HistoricalStats) {
   const relevant = indicators.filter((x) => !event.event_name || x.event_name.toLowerCase() === event.event_name.toLowerCase() || x.event_name.toLowerCase().includes(event.event_name.toLowerCase().split(" ")[0]));
-  const supporting = relevant.filter((x) => ["supports_above", "supports_upside", "positive", "above"].includes((x.relationship ?? x.direction ?? "").toLowerCase()) || (x.surprise ?? 0) > 0);
-  const counter = relevant.filter((x) => ["supports_below", "supports_downside", "negative", "below"].includes((x.relationship ?? x.direction ?? "").toLowerCase()) || (x.surprise ?? 0) < 0);
-  const total = Math.min(relevant.reduce((sum, x) => sum + Math.max(0, Number(x.relevance ?? 0)), 0), 100);
-  const evidence = Math.min(relevant.length * 12 + total, 100);
-  if (relevant.length === 0) {
-    return [buildScenario(event, "above_forecast", 33, "Insufficient evidence to estimate the likely release.", [], []),
-      buildScenario(event, "near_forecast", 34, "Insufficient evidence to estimate the likely release.", [], []),
-      buildScenario(event, "below_forecast", 33, "Insufficient evidence to estimate the likely release.", [], [])];
+  const aboveSignals = relevant.filter((x) => ["supports_above", "above_forecast", "supports_upside"].includes((x.relationship ?? "").toLowerCase()));
+  const belowSignals = relevant.filter((x) => ["supports_below", "below_forecast", "supports_downside"].includes((x.relationship ?? "").toLowerCase()));
+  const evidenceNames = relevant.slice(0, 8).map((x) => x.indicator_name);
+  const sampleText = history.samples
+    ? `Historical outcomes for this event: above ${history.above}/${history.samples}, below ${history.below}/${history.samples}, near ${history.near}/${history.samples} across ${history.samples} stored releases.`
+    : "No comparable historical actual-versus-forecast records are stored for this event yet.";
+  const context = [
+    sampleText,
+    evidenceNames.length ? `Available context indicators: ${evidenceNames.join(", ")}.` : "No related leading indicators were available.",
+    history.recent.length ? `Recent historical outcomes: ${history.recent.join(", ")}.` : "",
+  ].filter(Boolean).join(" ");
+  if (!history.samples && relevant.length === 0) {
+    return [
+      buildScenario(event, "above_forecast", 33, "Insufficient evidence. No historical surprise sample or related indicator is available.", [], []),
+      buildScenario(event, "near_forecast", 34, "Insufficient evidence. No historical surprise sample or related indicator is available.", [], []),
+      buildScenario(event, "below_forecast", 33, "Insufficient evidence. No historical surprise sample or related indicator is available.", [], []),
+    ];
   }
-  const aboveScore = Math.max(1, 33 + (supporting.length - counter.length) * 6 + Math.round(evidence * 0.08));
-  const belowScore = Math.max(1, 33 + (counter.length - supporting.length) * 6 + Math.round(evidence * 0.05));
-  const nearScore = Math.max(1, 100 - Math.abs(aboveScore - belowScore) - 40);
-  const totalScore = aboveScore + nearScore + belowScore;
-  const confidence = (n: number) => Math.round((n / totalScore) * 100);
-  const supportNames = supporting.slice(0, 6).map((x) => x.indicator_name);
-  const counterNames = counter.slice(0, 6).map((x) => x.indicator_name);
+
+  const key = Deno.env.get("GEMINI_API_KEY");
+  if (key) {
+    // This function is deliberately evidence-constrained: the model may summarize supplied data,
+    // but it must not invent consensus values, historical observations, or source citations.
+    return generateAIPrediction(event, relevant, history, key).catch(() => fallbackScenarios(event, relevant, history, context));
+  }
+  return fallbackScenarios(event, relevant, history, context, aboveSignals, belowSignals);
+}
+
+function fallbackScenarios(
+  event: Event,
+  indicators: Indicator[],
+  history: HistoricalStats,
+  context: string,
+  aboveSignals = indicators.filter((x) => ["supports_above", "above_forecast", "supports_upside"].includes((x.relationship ?? "").toLowerCase())),
+  belowSignals = indicators.filter((x) => ["supports_below", "below_forecast", "supports_downside"].includes((x.relationship ?? "").toLowerCase())),
+) {
+  if (!history.samples) {
+    const noHistory = "No historical surprise sample is available; directional evidence is too weak for a reliable estimate. " + context;
+    return [
+      buildScenario(event, "above_forecast", 33, noHistory, aboveSignals.map((x) => x.indicator_name), belowSignals.map((x) => x.indicator_name)),
+      buildScenario(event, "near_forecast", 34, noHistory, indicators.slice(0, 4).map((x) => x.indicator_name), []),
+      buildScenario(event, "below_forecast", 33, noHistory, belowSignals.map((x) => x.indicator_name), aboveSignals.map((x) => x.indicator_name)),
+    ];
+  }
+  const total = history.samples + 3;
+  const above = history.above + 1 + Math.min(aboveSignals.length, 2);
+  const below = history.below + 1 + Math.min(belowSignals.length, 2);
+  const near = history.near + 1;
+  const sum = above + below + near;
+  const score = (n: number) => Math.round((n / sum) * 100);
+  const scores = [score(above), score(near), score(below)];
+  scores[1] += 100 - scores.reduce((a, b) => a + b, 0);
+  const note = "Baseline estimate uses stored actual-versus-forecast history and explicit indicator relationships only. It is not a calibrated probability. " + context;
   return [
-    buildScenario(event, "above_forecast", confidence(aboveScore), supporting.length ? "Current evidence provides upside pressure signals, but the release remains uncertain." : "Insufficient evidence to estimate the likely release.", supportNames, counterNames),
-    buildScenario(event, "near_forecast", confidence(nearScore), "A near-forecast outcome remains plausible when supporting and counter evidence are mixed.", supportNames.slice(0, 3), counterNames.slice(0, 3)),
-    buildScenario(event, "below_forecast", confidence(belowScore), counter.length ? "Current evidence provides some downside pressure signals, but the release remains uncertain." : "Insufficient evidence to estimate the likely release.", counterNames, supportNames),
+    buildScenario(event, "above_forecast", scores[0], note, [...history.recent.slice(0, 3), ...aboveSignals.map((x) => x.indicator_name)].slice(0, 6), belowSignals.map((x) => x.indicator_name).slice(0, 4)),
+    buildScenario(event, "near_forecast", scores[1], note, history.recent.slice(0, 3), []),
+    buildScenario(event, "below_forecast", scores[2], note, [...history.recent.slice(0, 3), ...belowSignals.map((x) => x.indicator_name)].slice(0, 6), aboveSignals.map((x) => x.indicator_name).slice(0, 4)),
   ];
+}
+
+async function generateAIPrediction(event: Event, indicators: Indicator[], history: HistoricalStats, key: string) {
+  const prompt = {
+    task: "Estimate the tendency of an upcoming US macroeconomic release versus its consensus forecast. This is a research scenario, not a trading instruction.",
+    rules: [
+      "Use only the supplied event, historical surprise counts, and indicator observations.",
+      "Do not invent actual, forecast, release dates, sources, or observations.",
+      "For a missing forecast or weak evidence, favor near_forecast and explain the limitation.",
+      "Return scores for above_forecast, near_forecast, and below_forecast that sum to 100; scores are relative model scores, not calibrated probabilities.",
+      "Explain what supports and contradicts each scenario in concise language.",
+      "Keep Gold impact conditional: the market response also depends on core components, revisions, USD, Treasury yields, Fed expectations, and positioning.",
+    ],
+    event: { name: event.event_name, category: event.category, event_time: event.event_time, previous: event.previous, consensus_forecast: event.forecast },
+    historical_surprises: history,
+    indicators: indicators.map((x) => ({
+      name: x.indicator_name, latest_value: x.latest_value, previous_value: x.previous_value,
+      latest_date: x.latest_date, relationship: x.relationship, direction: x.direction,
+      source_name: x.source_name, source_url: x.source_url,
+    })),
+    required_json: {
+      scenarios: [
+        { scenario_type: "above_forecast", score: 33, reasoning: "brief evidence-based explanation", supporting_factors: ["factor"], counter_factors: ["factor"] },
+        { scenario_type: "near_forecast", score: 34, reasoning: "brief evidence-based explanation", supporting_factors: ["factor"], counter_factors: ["factor"] },
+        { scenario_type: "below_forecast", score: 33, reasoning: "brief evidence-based explanation", supporting_factors: ["factor"], counter_factors: ["factor"] },
+      ],
+    },
+  };
+  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + encodeURIComponent(key), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: JSON.stringify(prompt) }] }],
+      generationConfig: { responseMimeType: "application/json", temperature: 0.2 },
+    }),
+  });
+  if (!response.ok) throw new Error("Gemini prediction request failed (" + response.status + ").");
+  const payload = await response.json();
+  const raw = payload?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "";
+  const parsed = JSON.parse(raw.replace(/^\`\`\`json\s*/i, "").replace(/\`\`\`$/, ""));
+  const rows = Array.isArray(parsed.scenarios) ? parsed.scenarios : [];
+  const expected = ["above_forecast", "near_forecast", "below_forecast"];
+  const normalized = expected.map((type) => {
+    const row = rows.find((x: Record<string, unknown>) => x.scenario_type === type);
+    const score = Math.max(0, Math.min(100, Number(row?.score ?? 0)));
+    return {
+      ...buildScenario(event, type as "above_forecast" | "near_forecast" | "below_forecast", score,
+        String(row?.reasoning ?? "Evidence is limited."), stringArray(row?.supporting_factors), stringArray(row?.counter_factors)),
+    };
+  });
+  const total = normalized.reduce((sum, x) => sum + x.confidence, 0) || 1;
+  normalized.forEach((x) => { x.confidence = Math.round((x.confidence / total) * 100); });
+  normalized[1].confidence += 100 - normalized.reduce((sum, x) => sum + x.confidence, 0);
+  return normalized;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((x) => String(x)).slice(0, 6) : [];
+}
+
+async function historicalStats(admin: ReturnType<typeof createClient>, event: Event): Promise<HistoricalStats> {
+  const { data } = await admin.from("economic_events")
+    .select("id,event_name,event_time,forecast,actual,status")
+    .ilike("event_name", event.event_name)
+    .eq("status", "released")
+    .neq("id", event.id ?? "")
+    .order("event_time", { ascending: false })
+    .limit(12);
+  const rows = (data ?? []).filter((x) => x.forecast !== null && x.actual !== null);
+  const stats: HistoricalStats = { above: 0, below: 0, near: 0, samples: rows.length, recent: [] };
+  for (const row of rows) {
+    const actual = Number(row.actual);
+    const forecast = Number(row.forecast);
+    const type = actual > forecast ? "above" : actual < forecast ? "below" : "near";
+    stats[type]++;
+    stats.recent.push(type + " (" + String(row.event_time).slice(0, 10) + ")");
+  }
+  return stats;
 }
 
 function buildScenario(
@@ -372,7 +489,10 @@ async function persistCalendar(admin: ReturnType<typeof createClient>, events: (
       }, { onConflict: "event_id,release_date" });
     }
 
-    const indicators = Array.isArray(incoming.indicators) ? incoming.indicators as Record<string, unknown>[] : [];
+    let indicators = Array.isArray(incoming.indicators) ? incoming.indicators as Record<string, unknown>[] : [];
+    if (event.status === "upcoming" && indicators.length === 0) {
+      indicators = await fetchFredIndicators(event.category ?? null, event.event_name) as unknown as Record<string, unknown>[];
+    }
     if (indicators.length) {
       await admin.from("economic_event_indicators").delete().eq("event_id", event.id);
       const indicatorRows = indicators.map((x) => ({
@@ -394,7 +514,8 @@ async function persistCalendar(admin: ReturnType<typeof createClient>, events: (
 
     const { data: indicatorRows } = await admin.from("economic_event_indicators").select("*").eq("event_id", event.id).order("relevance", { ascending: false });
     if (event.status === "upcoming") {
-      const scenarios = buildScenarios(event, (indicatorRows ?? []).map((x) => ({ ...x, event_name: event.event_name })));
+      const history = await historicalStats(admin, event);
+      const scenarios = await buildScenarios(event, (indicatorRows ?? []).map((x) => ({ ...x, event_name: event.event_name })), history);
       await admin.from("economic_event_scenarios").upsert(scenarios, { onConflict: "event_id,scenario_type" });
     }
   }
