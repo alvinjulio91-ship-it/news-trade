@@ -3,7 +3,7 @@
 Mobile-first market-intelligence web app built with React, Vite, TypeScript, Tailwind CSS, Lucide React, React Router, and Supabase.
 
 ## Trading Plan
-The `/trading-plan` module keeps a private monthly record of targets, profit/loss records, monthly reviews, and backups in browser `localStorage`. It does not generate trading signals or transaction recommendations. Data stays on the current browser unless the user exports a backup.
+The `/trading-plan` module keeps a private monthly record of targets, profit/loss records, monthly reviews, and backups in browser `localStorage`, namespaced by the signed-in user's ID. It does not generate trading signals or transaction recommendations. Data stays on the current browser unless the user exports a backup.
 
 ## Current stages
 
@@ -37,7 +37,7 @@ The requested Google Custom Search JSON API integration is implemented server-si
 
 ## Economic data
 
-The calendar adapter is provider-neutral because no specific economic-calendar vendor was supplied. Configure `ECONOMIC_DATA_API_URL` and optionally `ECONOMIC_DATA_API_KEY` in Supabase Edge Function secrets.
+The economic calendar adapter supports Trading Economics with `TRADING_ECONOMICS_API_KEY`; it can also use a provider-neutral fallback via `ECONOMIC_DATA_API_URL` and optionally `ECONOMIC_DATA_API_KEY`. Keep these secrets in Supabase Edge Functions only.
 
 The Edge Function also supports `FRED_API_KEY` for official supporting macro series.
 
@@ -55,6 +55,7 @@ Edge Function secrets live in Supabase, not frontend code:
 ```env
 GOOGLE_CSE_API_KEY=
 GOOGLE_CSE_ID=
+TRADING_ECONOMICS_API_KEY=
 ECONOMIC_DATA_API_URL=
 ECONOMIC_DATA_API_KEY=
 ECONOMIC_DATA_API_PROVIDER=generic
