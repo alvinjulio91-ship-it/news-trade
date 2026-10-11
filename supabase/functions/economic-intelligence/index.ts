@@ -486,7 +486,7 @@ async function persistCalendar(admin: ReturnType<typeof createClient>, events: (
         source_url: incoming.source_url,
         source_type: "economic_data_api",
         source_verified: verifiedUrl(incoming.source_url),
-      });
+      }, { onConflict: "event_id,source_url" });
     }
 
     if (event.status === "released") {
